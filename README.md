@@ -142,6 +142,20 @@ OLLAMA_MODEL=你已经安装的本地模型名称
 
 模型系统提示词单独保存在 `app/services/prompts.py`，要求共情、非诊断、不承诺疗效；HIGH 风险时优先当地紧急服务、可信赖的人和校园支持建议。服务端不会记录 API Key。
 
+## SSE 流式聊天
+
+学生页面通过 `POST /api/chat/stream` 接收 Server-Sent Events，不再等待完整回复后一次性显示。事件类型：
+
+| 事件 | 内容 |
+| --- | --- |
+| `token` | 一段新增回复文本 |
+| `done` | 完整回复结束，并返回已保存消息的 ID |
+| `error` | 不包含内部异常的友好错误提示 |
+
+用户消息和风险评估会先保存。只有 Provider 完整结束后，系统才会把拼接后的文本保存为一条助手消息；流式失败时不会保存半截助手回复。Mock Provider 会按小段输出，OpenAI-compatible Provider 解析 SSE，Ollama Provider 解析流式 NDJSON。
+
+原来的 `POST /api/chat` 非流式接口暂时保留，便于兼容和测试。
+
 ## 当前范围
 
-模块 1–5 已完成。聊天支持 Mock、OpenAI-compatible API 和 Ollama；SSE 流式输出和 RAG 将在后续模块中实现。
+模块 1–6 已完成。聊天支持 Mock、OpenAI-compatible API、Ollama 和 SSE 流式输出；RAG 将在后续模块中实现。

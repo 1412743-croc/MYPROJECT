@@ -1,8 +1,10 @@
 """Configurable AI providers with deterministic fallback behavior."""
 
+import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Protocol, Sequence
+from collections.abc import Iterator, Sequence
+from typing import Any, Protocol
 
 import httpx
 
@@ -29,6 +31,13 @@ class AIProvider(Protocol):
         risk_level: RiskLevel,
         history: Sequence[ChatTurn],
     ) -> str: ...
+
+    def stream(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[ChatTurn],
+    ) -> Iterator[str]: ...
 
 
 class AIProviderError(RuntimeError):
@@ -71,6 +80,59 @@ class OpenAICompatibleProvider:
             return content.strip()
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             raise AIProviderError(f"openai request failed: {type(exc).__name__}") from exc
+
+    def stream(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[ChatTurn],
+    ) -> Iterator[str]:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "developer", "content": build_system_prompt(risk_level)},
+                *({"role": turn.role, "content": turn.content} for turn in history),
+                {"role": "user", "content": message},
+            ],
+            "temperature": self.temperature,
+            "stream": True,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        try:
+            if self.client is not None:
+                with self.client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=self.timeout,
+                ) as response:
+                    yield from self._openai_chunks(response)
+            else:
+                with httpx.Client(timeout=self.timeout) as client:
+                    with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                    ) as response:
+                        yield from self._openai_chunks(response)
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+            raise AIProviderError(f"openai stream failed: {type(exc).__name__}") from exc
+
+    @staticmethod
+    def _openai_chunks(response: httpx.Response) -> Iterator[str]:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line.startswith("data:"):
+                continue
+            data_text = line[5:].strip()
+            if data_text == "[DONE]":
+                break
+            data = json.loads(data_text)
+            content = data["choices"][0]["delta"].get("content")
+            if isinstance(content, str) and content:
+                yield content
 
     def _post(
         self,
@@ -124,6 +186,55 @@ class OllamaProvider:
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             raise AIProviderError(f"ollama request failed: {type(exc).__name__}") from exc
 
+    def stream(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[ChatTurn],
+    ) -> Iterator[str]:
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": build_system_prompt(risk_level)},
+                *({"role": turn.role, "content": turn.content} for turn in history),
+                {"role": "user", "content": message},
+            ],
+            "stream": True,
+            "options": {"temperature": self.temperature},
+        }
+        try:
+            if self.client is not None:
+                with self.client.stream(
+                    "POST",
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    timeout=self.timeout,
+                ) as response:
+                    yield from self._ollama_chunks(response)
+            else:
+                with httpx.Client(timeout=self.timeout) as client:
+                    with client.stream(
+                        "POST",
+                        f"{self.base_url}/api/chat",
+                        json=payload,
+                    ) as response:
+                        yield from self._ollama_chunks(response)
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise AIProviderError(f"ollama stream failed: {type(exc).__name__}") from exc
+
+    @staticmethod
+    def _ollama_chunks(response: httpx.Response) -> Iterator[str]:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line.strip():
+                continue
+            data = json.loads(line)
+            content = data.get("message", {}).get("content")
+            if isinstance(content, str) and content:
+                yield content
+            if data.get("done") is True:
+                break
+
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.base_url}/api/chat"
         if self.client is not None:
@@ -159,6 +270,28 @@ class FallbackAIProvider:
             )
             return self.fallback.generate(message, risk_level, history)
 
+    def stream(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[ChatTurn],
+    ) -> Iterator[str]:
+        emitted = False
+        try:
+            for chunk in self.primary.stream(message, risk_level, history):
+                emitted = True
+                yield chunk
+        except AIProviderError as exc:
+            logger.warning(
+                "AI provider '%s' stream failed (%s); %s",
+                self.primary.name,
+                type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__,
+                "partial output cannot be retried" if emitted else f"fallback to '{self.fallback.name}'",
+            )
+            if emitted:
+                raise
+            yield from self.fallback.stream(message, risk_level, history)
+
 
 def build_ai_provider(
     settings: Settings,
@@ -182,6 +315,13 @@ def build_ai_provider(
 
     logger.warning("Unknown AI provider '%s'; 回退 to MockProvider", provider_name)
     return fallback
+
+
+def get_ai_provider() -> AIProvider:
+    """FastAPI dependency that constructs the configured provider."""
+    from app.core.config import get_settings
+
+    return build_ai_provider(get_settings())
 
 
 def provider_status(settings: Settings) -> dict[str, str | bool]:

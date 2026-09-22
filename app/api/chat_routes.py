@@ -1,10 +1,12 @@
 """Student chat routes and protected student page."""
 
+import json
+import logging
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -17,10 +19,16 @@ from app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionResponse,
 )
+from app.services.ai import AIProvider, get_ai_provider
 from app.services.chat import ChatService, ChatSessionNotFound
 
 router = APIRouter()
 student_page = Path(__file__).resolve().parents[1] / "pages" / "student.html"
+logger = logging.getLogger(__name__)
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.get("/student.html", include_in_schema=False)
@@ -75,9 +83,10 @@ def send_chat_message(
     request: ChatRequest,
     user: Annotated[User, Depends(require_student)],
     db: Annotated[Session, Depends(get_db)],
+    ai_provider: Annotated[AIProvider, Depends(get_ai_provider)],
 ) -> ChatExchangeResponse:
     try:
-        user_message, assistant_message = ChatService(db).send_message(
+        user_message, assistant_message = ChatService(db, ai_provider=ai_provider).send_message(
             user.id,
             request.session_id,
             request.message,
@@ -87,4 +96,39 @@ def send_chat_message(
     return ChatExchangeResponse(
         user_message=ChatMessageResponse.model_validate(user_message),
         assistant_message=ChatMessageResponse.model_validate(assistant_message),
+    )
+
+
+@router.post("/api/chat/stream", tags=["chat"])
+def stream_chat_message(
+    request: ChatRequest,
+    user: Annotated[User, Depends(require_student)],
+    db: Annotated[Session, Depends(get_db)],
+    ai_provider: Annotated[AIProvider, Depends(get_ai_provider)],
+) -> StreamingResponse:
+    service = ChatService(db, ai_provider=ai_provider)
+    try:
+        service.ensure_session(user.id, request.session_id)
+    except ChatSessionNotFound as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+    def event_stream():
+        try:
+            for item in service.stream_message(user.id, request.session_id, request.message):
+                if item.event == "token":
+                    yield _sse("token", {"content": item.content})
+                elif item.event == "done":
+                    yield _sse("done", {"message_id": item.message_id})
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Streaming chat failed: %s", type(exc).__name__)
+            yield _sse("error", {"message": "回复生成失败，请稍后重试。"})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

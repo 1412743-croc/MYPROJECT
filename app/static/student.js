@@ -36,6 +36,66 @@ function renderMessage(message) {
 
   item.append(label, content);
   messagesElement.append(item);
+  return { item, content };
+}
+
+function parseSseBlock(block) {
+  let eventName = "message";
+  const dataLines = [];
+  block.replaceAll("\r", "").split("\n").forEach((line) => {
+    if (line.startsWith("event:")) eventName = line.slice(6).trim();
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  });
+  if (dataLines.length === 0) return null;
+  return { event: eventName, data: JSON.parse(dataLines.join("\n")) };
+}
+
+async function streamChat(sessionId, message) {
+  const response = await fetch("/api/chat/stream", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, message }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `请求失败（${response.status}）`);
+  }
+  if (!response.body) throw new Error("浏览器不支持流式响应");
+
+  renderMessage({ role: "user", content: message });
+  const assistant = renderMessage({ role: "assistant", content: "" });
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed = false;
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const parsed = parseSseBlock(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        if (parsed?.event === "token") {
+          assistant.content.textContent += parsed.data.content;
+          messagesElement.scrollTop = messagesElement.scrollHeight;
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        } else if (parsed?.event === "done") {
+          completed = true;
+        } else if (parsed?.event === "error") {
+          throw new Error(parsed.data.message || "回复生成失败，请稍后重试。");
+        }
+        boundary = buffer.indexOf("\n\n");
+      }
+      if (done) break;
+    }
+    if (!completed) throw new Error("回复流意外中断，请稍后重试。");
+  } catch (error) {
+    assistant.item.remove();
+    throw error;
+  }
 }
 
 async function loadMessages(sessionId) {
@@ -92,14 +152,8 @@ formElement.addEventListener("submit", async (event) => {
   inputElement.disabled = true;
   showStatus("正在回复……");
   try {
-    const exchange = await request("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({ session_id: activeSessionId, message }),
-    });
-    renderMessage(exchange.user_message);
-    renderMessage(exchange.assistant_message);
     inputElement.value = "";
-    messagesElement.scrollTop = messagesElement.scrollHeight;
+    await streamChat(activeSessionId, message);
     await loadSessions();
     showStatus();
   } catch (error) {

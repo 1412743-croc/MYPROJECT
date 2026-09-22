@@ -61,6 +61,33 @@ def test_openai_provider_maps_request_and_response_without_network() -> None:
     assert body["messages"][-1] == {"role": "user", "content": "我最近有些焦虑"}
 
 
+def test_openai_provider_parses_streaming_sse_without_network() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["stream"] is True
+        return httpx.Response(
+            200,
+            text=(
+                'data: {"choices":[{"delta":{"content":"逐段"}}]}\n\n'
+                'data: {"choices":[{"delta":{"content":"回复"}}]}\n\n'
+                "data: [DONE]\n\n"
+            ),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    settings = Settings(
+        ai_provider="openai",
+        openai_base_url="https://api.example.test/v1",
+        openai_api_key="secret-test-key",
+        openai_model="test-chat-model",
+    )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        provider = OpenAICompatibleProvider(settings, client=client)
+        chunks = list(provider.stream("你好", RiskLevel.LOW, []))
+
+    assert chunks == ["逐段", "回复"]
+
+
 def test_ollama_provider_maps_native_chat_request_without_network() -> None:
     captured: dict[str, object] = {}
 
@@ -81,6 +108,40 @@ def test_ollama_provider_maps_native_chat_request_without_network() -> None:
     assert captured["url"] == "http://localhost:11434/api/chat"
     assert captured["body"]["stream"] is False
     assert captured["body"]["messages"][0]["role"] == "system"
+
+
+def test_ollama_provider_parses_streaming_ndjson_without_network() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["stream"] is True
+        return httpx.Response(
+            200,
+            text=(
+                '{"message":{"content":"本地"},"done":false}\n'
+                '{"message":{"content":"流式"},"done":false}\n'
+                '{"message":{"content":""},"done":true}\n'
+            ),
+        )
+
+    settings = Settings(
+        ai_provider="ollama",
+        ollama_base_url="http://localhost:11434",
+        ollama_model="local-test-model",
+    )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        chunks = list(OllamaProvider(settings, client=client).stream("你好", RiskLevel.LOW, []))
+
+    assert chunks == ["本地", "流式"]
+
+
+def test_mock_provider_stream_reassembles_complete_reply() -> None:
+    provider = MockProvider()
+
+    complete = provider.generate("最近压力很大", RiskLevel.MEDIUM, [])
+    chunks = list(provider.stream("最近压力很大", RiskLevel.MEDIUM, []))
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == complete
 
 
 def test_missing_openai_key_falls_back_to_mock(caplog) -> None:

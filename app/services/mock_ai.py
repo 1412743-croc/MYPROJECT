@@ -1,6 +1,6 @@
 """Deterministic offline AI provider."""
 
-from typing import Sequence
+from collections.abc import Iterator, Sequence
 
 from app.models.risk import RiskLevel
 
@@ -31,3 +31,14 @@ class MockProvider:
             "如果你愿意，可以再说说最近最困扰你的事情；我们可以一起把它分成更小的部分。"
             "我提供的是支持性交流，不是医疗诊断。"
         )
+
+    def stream(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[object],
+    ) -> Iterator[str]:
+        reply = self.generate(message, risk_level, history)
+        chunk_size = 8
+        for start in range(0, len(reply), chunk_size):
+            yield reply[start : start + chunk_size]

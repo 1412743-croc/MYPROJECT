@@ -1,17 +1,27 @@
 """Persistent student chat operations."""
 
+from collections.abc import Iterator
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.models.chat import ChatMessage, ChatSession, MessageRole
 from app.models.risk import RiskAssessment, RiskCase, RiskLevel
-from app.services.ai import AIProvider, ChatTurn, build_ai_provider
-from app.services.risk import assess_risk
+from app.services.ai import AIProvider, AIProviderError, ChatTurn, build_ai_provider
+from app.services.risk import RiskAssessmentResult, assess_risk
 
 
 class ChatSessionNotFound(LookupError):
     pass
+
+
+@dataclass(frozen=True)
+class ChatStreamEvent:
+    event: str
+    content: str = ""
+    message_id: int | None = None
 
 
 class ChatService:
@@ -49,12 +59,50 @@ class ChatService:
         )
         return list(self.db.scalars(statement))
 
+    def ensure_session(self, user_id: int, session_id: int) -> None:
+        self._owned_session(user_id, session_id)
+
     def send_message(
         self,
         user_id: int,
         session_id: int,
         content: str,
     ) -> tuple[ChatMessage, ChatMessage]:
+        user_message, risk_result, history = self._record_user_message(
+            user_id,
+            session_id,
+            content,
+        )
+        reply = self.ai_provider.generate(content, risk_result.level, history)
+        assistant_message = self._save_assistant_message(session_id, reply)
+        return user_message, assistant_message
+
+    def stream_message(
+        self,
+        user_id: int,
+        session_id: int,
+        content: str,
+    ) -> Iterator[ChatStreamEvent]:
+        _, risk_result, history = self._record_user_message(user_id, session_id, content)
+        chunks: list[str] = []
+        for chunk in self.ai_provider.stream(content, risk_result.level, history):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            yield ChatStreamEvent(event="token", content=chunk)
+
+        reply = "".join(chunks).strip()
+        if not reply:
+            raise AIProviderError("provider returned an empty stream")
+        assistant_message = self._save_assistant_message(session_id, reply)
+        yield ChatStreamEvent(event="done", message_id=assistant_message.id)
+
+    def _record_user_message(
+        self,
+        user_id: int,
+        session_id: int,
+        content: str,
+    ) -> tuple[ChatMessage, RiskAssessmentResult, list[ChatTurn]]:
         chat_session = self._owned_session(user_id, session_id)
         history = self._recent_history(session_id)
         risk_result = assess_risk(content)
@@ -80,21 +128,23 @@ class ChatService:
                     status="open",
                 )
             )
-
-        assistant_message = ChatMessage(
-            session_id=session_id,
-            role=MessageRole.ASSISTANT,
-            content=self.ai_provider.generate(content, risk_result.level, history),
-        )
-        self.db.add(assistant_message)
-
         if chat_session.title == "新对话":
             chat_session.title = content[:30]
 
         self.db.commit()
         self.db.refresh(user_message)
+        return user_message, risk_result, history
+
+    def _save_assistant_message(self, session_id: int, content: str) -> ChatMessage:
+        assistant_message = ChatMessage(
+            session_id=session_id,
+            role=MessageRole.ASSISTANT,
+            content=content,
+        )
+        self.db.add(assistant_message)
+        self.db.commit()
         self.db.refresh(assistant_message)
-        return user_message, assistant_message
+        return assistant_message
 
     def _owned_session(self, user_id: int, session_id: int) -> ChatSession:
         chat_session = self.db.scalar(
