@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindBridge 学生支持</title>
+    <link rel="stylesheet" href="/student.css" />
+    <script src="/student.js" defer></script>
+  </head>
+  <body>
+    <main class="chat-shell">
+      <header>
+        <div>
+          <p class="eyebrow">MindBridge</p>
+          <h1>学生支持</h1>
+        </div>
+        <button id="new-session" type="button">新建对话</button>
+      </header>
+
+      <div class="workspace">
+        <aside aria-label="会话列表">
+          <h2>历史会话</h2>
+          <div id="sessions"></div>
+        </aside>
+
+        <section class="conversation" aria-label="聊天区域">
+          <div id="messages" aria-live="polite"></div>
+          <p id="status" role="status"></p>
+          <form id="chat-form">
+            <label for="message">想聊些什么？</label>
+            <div class="composer">
+              <textarea id="message" maxlength="2000" required></textarea>
+              <button type="submit">发送</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+:root {
+  color: #24302c;
+  background: #eef4f0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, textarea { font: inherit; }
+
+.chat-shell {
+  width: min(1100px, calc(100% - 32px));
+  margin: 32px auto;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 16px 50px rgb(31 72 58 / 12%);
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  border-bottom: 1px solid #dce8e1;
+}
+
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 0; }
+.eyebrow { margin-bottom: 4px; color: #39745e; font-weight: 700; }
+.workspace { display: grid; grid-template-columns: 240px 1fr; min-height: 620px; }
+aside { padding: 24px; background: #f7faf8; border-right: 1px solid #dce8e1; }
+aside h2 { font-size: 1rem; }
+#sessions { display: grid; gap: 8px; }
+#sessions button { text-align: left; background: transparent; }
+#sessions button.active { background: #dceee5; }
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #194f3b;
+  background: #dceee5;
+  cursor: pointer;
+}
+
+.conversation { display: grid; grid-template-rows: 1fr auto auto; min-width: 0; }
+#messages { padding: 24px; overflow-y: auto; }
+.message { max-width: 78%; margin-bottom: 16px; padding: 14px 16px; border-radius: 14px; }
+.message p { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.6; }
+.message.user { margin-left: auto; background: #daf0e5; }
+.message.assistant { background: #f0f2f1; }
+#status { min-height: 24px; margin: 0 24px; color: #80520c; }
+form { padding: 16px 24px 24px; border-top: 1px solid #e6ece8; }
+form label { display: block; margin-bottom: 8px; font-weight: 700; }
+.composer { display: flex; gap: 12px; }
+textarea { width: 100%; min-height: 72px; resize: vertical; padding: 12px; border: 1px solid #bdcec5; border-radius: 10px; }
+.composer button { align-self: end; background: #2f7458; color: #fff; }
+
+@media (max-width: 720px) {
+  .workspace { grid-template-columns: 1fr; }
+  aside { border-right: 0; border-bottom: 1px solid #dce8e1; }
+  .conversation { min-height: 520px; }
+}

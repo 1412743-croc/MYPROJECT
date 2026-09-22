@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 PBKDF2_ITERATIONS = 600_000
 basic_auth = HTTPBasic(auto_error=False)
@@ -71,4 +71,14 @@ def current_user(
     user = db.scalar(select(User).where(User.username == credentials.username))
     if user is None or not verify_password(credentials.password, user.password_hash):
         raise _unauthorized()
+    return user
+
+
+def require_student(user: Annotated[User, Depends(current_user)]) -> User:
+    """Allow student-only pages and APIs."""
+    if user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="仅学生账号可以使用聊天功能",
+        )
     return user

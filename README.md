@@ -59,6 +59,31 @@ Invoke-RestMethod `
 
 HTTP Basic 只编码凭据，并不加密传输；当前适合本机开发，正式部署时必须使用 HTTPS。
 
+## 学生聊天
+
+启动应用后访问 <http://127.0.0.1:8000/student.html>。浏览器弹出认证框时使用学生账号：
+
+```text
+student / student123
+```
+
+学生端当前支持：
+
+- 新建和切换会话。
+- 发送消息并获得离线 Mock AI 的支持性回复。
+- 将用户和助手消息完整保存到 SQLite。
+- 页面刷新后重新加载历史会话与消息。
+- 对明显高风险词语返回谨慎的紧急求助提示。
+
+管理员账号不能访问学生页面或调用聊天接口。当前回复由确定性的 Mock AI 生成，不会访问外网，也不代表真实 AI 或医疗诊断。
+
+聊天接口包括：
+
+- `POST /api/chat/sessions`
+- `GET /api/chat/sessions`
+- `GET /api/chat/sessions/{session_id}/messages`
+- `POST /api/chat`
+
 ## 当前范围
 
-模块 1 和模块 2 已完成。聊天、AI 和 RAG 将在后续模块中实现。
+模块 1–3 已完成。当前聊天使用 Mock AI；真实 AI、正式风险评估和 RAG 将在后续模块中实现。

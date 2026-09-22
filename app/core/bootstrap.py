@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.core.security import hash_password
-from app.models.user import User, UserRole
+from app.models import User, UserRole
 
 
 def initialize_database() -> None:
