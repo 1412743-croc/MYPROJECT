@@ -3,9 +3,10 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.models.chat import ChatMessage, ChatSession, MessageRole
 from app.models.risk import RiskAssessment, RiskCase, RiskLevel
-from app.services.mock_ai import MockAI
+from app.services.ai import AIProvider, ChatTurn, build_ai_provider
 from app.services.risk import assess_risk
 
 
@@ -14,8 +15,15 @@ class ChatSessionNotFound(LookupError):
 
 
 class ChatService:
-    def __init__(self, db: Session) -> None:
+    def __init__(
+        self,
+        db: Session,
+        settings: Settings | None = None,
+        ai_provider: AIProvider | None = None,
+    ) -> None:
         self.db = db
+        self.settings = settings or get_settings()
+        self.ai_provider = ai_provider or build_ai_provider(self.settings)
 
     def create_session(self, user_id: int, title: str) -> ChatSession:
         chat_session = ChatSession(user_id=user_id, title=title.strip() or "新对话")
@@ -48,6 +56,7 @@ class ChatService:
         content: str,
     ) -> tuple[ChatMessage, ChatMessage]:
         chat_session = self._owned_session(user_id, session_id)
+        history = self._recent_history(session_id)
         risk_result = assess_risk(content)
         user_message = ChatMessage(session_id=session_id, role=MessageRole.USER, content=content)
         self.db.add(user_message)
@@ -75,7 +84,7 @@ class ChatService:
         assistant_message = ChatMessage(
             session_id=session_id,
             role=MessageRole.ASSISTANT,
-            content=MockAI.reply(content, risk_result.level),
+            content=self.ai_provider.generate(content, risk_result.level, history),
         )
         self.db.add(assistant_message)
 
@@ -97,3 +106,15 @@ class ChatService:
         if chat_session is None:
             raise ChatSessionNotFound("会话不存在")
         return chat_session
+
+    def _recent_history(self, session_id: int) -> list[ChatTurn]:
+        if self.settings.ai_history_limit == 0:
+            return []
+        statement = (
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(self.settings.ai_history_limit)
+        )
+        messages = reversed(list(self.db.scalars(statement)))
+        return [ChatTurn(role=item.role.value, content=item.content) for item in messages]

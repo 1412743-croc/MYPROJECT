@@ -4,6 +4,7 @@ const statusElement = document.querySelector("#status");
 const formElement = document.querySelector("#chat-form");
 const inputElement = document.querySelector("#message");
 const newSessionButton = document.querySelector("#new-session");
+const providerElement = document.querySelector("#ai-provider");
 
 let activeSessionId = null;
 
@@ -110,4 +111,12 @@ formElement.addEventListener("submit", async (event) => {
 });
 
 newSessionButton.addEventListener("click", () => createSession().catch((error) => showStatus(error.message)));
+request("/api/ai/status")
+  .then((status) => {
+    const model = status.effective_provider === "mock" ? "Mock AI" : status.model;
+    providerElement.textContent = `当前回复：${status.effective_provider} · ${model}`;
+  })
+  .catch(() => {
+    providerElement.textContent = "当前回复：状态不可用";
+  });
 loadSessions().catch((error) => showStatus(error.message));

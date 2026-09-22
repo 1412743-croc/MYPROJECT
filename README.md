@@ -109,6 +109,39 @@ admin / admin123
 
 学生不能访问管理页面或管理接口。当前规则评估只是保守的第一层筛查，不能代替专业人员判断。
 
+## AI Provider
+
+默认使用 `MockProvider`，不访问网络、不消耗 Token，也不会产生模型费用。学生页面顶部和 `GET /api/ai/status` 会显示当前有效 Provider，但不会返回 API Key。
+
+如需启用 OpenAI-compatible Chat Completions，请在本地新建 `.env`（该文件已被 Git 忽略）：
+
+```env
+AI_PROVIDER=openai
+AI_TIMEOUT_SECONDS=30
+AI_TEMPERATURE=0.4
+AI_HISTORY_LIMIT=10
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=你的_API_Key
+OPENAI_MODEL=你要使用的模型名称
+```
+
+也可以连接本机 Ollama：
+
+```env
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=你已经安装的本地模型名称
+```
+
+修改 `.env` 后需要重启应用。以下情况会自动回退到 Mock Provider：
+
+- Provider 名称未知。
+- OpenAI API Key 或模型名称缺失。
+- Ollama 模型名称缺失。
+- 网络超时、连接失败、HTTP 错误或返回结构异常。
+
+模型系统提示词单独保存在 `app/services/prompts.py`，要求共情、非诊断、不承诺疗效；HIGH 风险时优先当地紧急服务、可信赖的人和校园支持建议。服务端不会记录 API Key。
+
 ## 当前范围
 
-模块 1–4 已完成。当前聊天仍使用 Mock AI；真实 AI 和 RAG 将在后续模块中实现。
+模块 1–5 已完成。聊天支持 Mock、OpenAI-compatible API 和 Ollama；SSE 流式输出和 RAG 将在后续模块中实现。

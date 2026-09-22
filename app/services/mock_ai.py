@@ -1,11 +1,19 @@
-"""Deterministic offline replies used before a real AI provider is introduced."""
+"""Deterministic offline AI provider."""
+
+from typing import Sequence
 
 from app.models.risk import RiskLevel
 
 
-class MockAI:
-    @classmethod
-    def reply(cls, message: str, risk_level: RiskLevel) -> str:
+class MockProvider:
+    name = "mock"
+
+    def generate(
+        self,
+        message: str,
+        risk_level: RiskLevel,
+        history: Sequence[object],
+    ) -> str:
         if risk_level == RiskLevel.HIGH:
             return (
                 "我很在意你现在的安全。请立即联系当地紧急服务，并尽快告诉一位你信任的人，"

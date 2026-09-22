@@ -28,6 +28,7 @@ header {
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; }
 .eyebrow { margin-bottom: 4px; color: #39745e; font-weight: 700; }
+.provider { margin: 6px 0 0; color: #66736d; font-size: .9rem; }
 .workspace { display: grid; grid-template-columns: 240px 1fr; min-height: 620px; }
 aside { padding: 24px; background: #f7faf8; border-right: 1px solid #dce8e1; }
 aside h2 { font-size: 1rem; }
