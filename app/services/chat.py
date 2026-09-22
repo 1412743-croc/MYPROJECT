@@ -4,7 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.chat import ChatMessage, ChatSession, MessageRole
+from app.models.risk import RiskAssessment, RiskCase, RiskLevel
 from app.services.mock_ai import MockAI
+from app.services.risk import assess_risk
 
 
 class ChatSessionNotFound(LookupError):
@@ -46,14 +48,34 @@ class ChatService:
         content: str,
     ) -> tuple[ChatMessage, ChatMessage]:
         chat_session = self._owned_session(user_id, session_id)
+        risk_result = assess_risk(content)
         user_message = ChatMessage(session_id=session_id, role=MessageRole.USER, content=content)
         self.db.add(user_message)
         self.db.flush()
 
+        self.db.add(
+            RiskAssessment(
+                message_id=user_message.id,
+                level=risk_result.level,
+                matched_rules=list(risk_result.matched_rules),
+                reason=risk_result.reason,
+            )
+        )
+        if risk_result.level == RiskLevel.HIGH:
+            self.db.add(
+                RiskCase(
+                    user_id=user_id,
+                    message_id=user_message.id,
+                    level=risk_result.level,
+                    reason=risk_result.reason,
+                    status="open",
+                )
+            )
+
         assistant_message = ChatMessage(
             session_id=session_id,
             role=MessageRole.ASSISTANT,
-            content=MockAI.reply(content),
+            content=MockAI.reply(content, risk_result.level),
         )
         self.db.add(assistant_message)
 

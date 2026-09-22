@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.admin_routes import router as admin_router
 from app.api.chat_routes import router as chat_router
 from app.api.routes import router
 from app.core.bootstrap import initialize_database, seed_demo_users
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(chat_router)
+    app.include_router(admin_router)
     static_dir = Path(__file__).parent / "static"
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app

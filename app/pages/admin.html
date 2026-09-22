@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindBridge 管理后台</title>
+    <link rel="stylesheet" href="/admin.css" />
+    <script src="/admin.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">MindBridge</p>
+          <h1>管理后台</h1>
+          <p>查看规则生成的风险案例和评估记录。系统不会自动发送通知或联系任何人。</p>
+        </div>
+        <button id="refresh" type="button">刷新数据</button>
+      </header>
+
+      <p id="status" role="status"></p>
+
+      <section>
+        <div class="section-heading">
+          <h2>高风险案例</h2>
+          <span id="case-count" class="count">0</span>
+        </div>
+        <div id="cases" class="cards"></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>全部评估记录</h2>
+          <span id="report-count" class="count">0</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>用户</th>
+                <th>等级</th>
+                <th>消息</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody id="reports"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

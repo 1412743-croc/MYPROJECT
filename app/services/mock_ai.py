@@ -1,27 +1,25 @@
 """Deterministic offline replies used before a real AI provider is introduced."""
 
+from app.models.risk import RiskLevel
+
 
 class MockAI:
-    HIGH_RISK_PHRASES = (
-        "自杀",
-        "不想活",
-        "结束生命",
-        "伤害自己",
-        "kill myself",
-        "suicide",
-    )
-
     @classmethod
-    def reply(cls, message: str) -> str:
-        normalized = message.casefold()
-        if any(phrase in normalized for phrase in cls.HIGH_RISK_PHRASES):
+    def reply(cls, message: str, risk_level: RiskLevel) -> str:
+        if risk_level == RiskLevel.HIGH:
             return (
-                "听起来你现在可能处在危险中，你的安全最重要。请立即联系当地紧急服务，"
-                "并尽快告诉一位你信任的人或校园工作人员，请他们陪在你身边。"
-                "这个系统不能替代紧急援助。"
+                "我很在意你现在的安全。请立即联系当地紧急服务，并尽快告诉一位你信任的人，"
+                "也可以联系校园心理中心、辅导员或其他校园支持人员，请他们陪在你身边。"
+                "如果可以，请先远离可能伤害自己的物品或地点。这个系统不能替代紧急援助。"
+            )
+        if risk_level == RiskLevel.MEDIUM:
+            return (
+                "谢谢你说出这些感受。你提到的压力或情绪困扰值得认真对待。"
+                "如果愿意，可以告诉我这种状态持续多久了，以及现在最难承受的部分。"
+                "也可以考虑联系一位信任的人或校园心理支持资源。"
             )
         return (
-            "谢谢你愿意告诉我这些。听起来你正在承受一些压力。"
+            "谢谢你愿意告诉我这些。"
             "如果你愿意，可以再说说最近最困扰你的事情；我们可以一起把它分成更小的部分。"
             "我提供的是支持性交流，不是医疗诊断。"
         )

@@ -82,3 +82,13 @@ def require_student(user: Annotated[User, Depends(current_user)]) -> User:
             detail="仅学生账号可以使用聊天功能",
         )
     return user
+
+
+def require_admin(user: Annotated[User, Depends(current_user)]) -> User:
+    """Allow administrator-only pages and APIs."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="仅管理员账号可以访问该资源",
+        )
+    return user
